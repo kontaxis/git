@@ -21,6 +21,7 @@ use File::Find qw();
 use File::Basename qw(basename);
 use Time::HiRes qw(gettimeofday tv_interval);
 use Digest::MD5 qw(md5_hex);
+use Git::LoadCPAN::Mail::Address;
 
 binmode STDOUT, ':utf8';
 
@@ -3460,10 +3461,30 @@ sub parse_date {
 	return %date;
 }
 
+sub is_mailaddr {
+	my @addrs = Mail::Address->parse(shift);
+	if (!@addrs || !$addrs[0]->host || !$addrs[0]->user) {
+		return 0;
+	}
+	return 1;
+}
+
 sub hide_mailaddrs_if_private {
 	my $line = shift;
 	return $line unless gitweb_check_feature('email-privacy');
-	$line =~ s/<[^@>]+@[^>]+>/<redacted>/g;
+	while ($line =~ m/(<[^>]+>)/g) {
+		my $match = $1;
+		if (!is_mailaddr($match)) {
+			next;
+		}
+		my $match_offset = pos($line) - length($match);
+		pos $line = $match_offset;
+
+		my $redaction = "<redacted>";
+		$line =~ s/\G(<[^>]+>)/$redaction/;
+
+		pos $line = $match_offset + length($redaction);
+	}
 	return $line;
 }
 
